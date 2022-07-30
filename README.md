@@ -26,7 +26,7 @@ It is recomended to operate in a virtual environment, created in root folder:
         **Description**: Script deletes all Custom Managed [KMS](https://aws.amazon.com/kms/) keys in given region.  
 
     * ##### [[AWS] Delete all DynamoDB table records](aws/dynamodb/delete-records.py)
-        **Description**: Script retrieves and deletes all records from [DynamoDB](https://aws.amazon.com/kms/) table. Uses `scan` method to retrieve records, so be aware of possible costs. 
+        **Description**: Script retrieves and deletes all records from [DynamoDB](https://aws.amazon.com/dynamodb) table. Uses `scan` method to retrieve records, so be aware of possible costs. 
 
     * ##### [[AWS] Cognito delete all users](aws/cognito/delete-users.py)
         **Description**: Script removes ALL users from [AWS Cognito](https://aws.amazon.com/cognito/) User Pool in given region.
