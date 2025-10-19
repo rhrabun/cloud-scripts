@@ -6,16 +6,7 @@
 To get a list of arguments required for script execution, run script with `-h` flag(e.g. `python3/{script name} -h(--help)`).
 
 ### Set up a virtual environment
-It is recomended to operate in a virtual environment, created in root folder:
-
-* Install virtual environment module \
-`python3 -m pip install virtualenv`
-* Create virtual environment in folder \
-`python3 -m virtualenv venv`
-* Activate environment \
-`source ./venv/bin/activate`
-* Install dependencies \
-`pip install -r requirements.txt`
+Use [uv](https://docs.astral.sh/uv/) for managing dependencies and virtual environments 
 
 ### Scripts tldr:
 * Amazon Web Services
