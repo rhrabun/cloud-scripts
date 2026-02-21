@@ -39,3 +39,6 @@ It is recomended to operate in a virtual environment, created in root folder:
     
     * ##### [[AWS] SQS Extract all messages](aws/sqs/extract-messages.py)
         **Description**: Script extracts all messages from [SQS](https://aws.amazon.com/sqs/) queue. Script does not delete messages, so make sure to increase `visibility timeout` in queue settings to avoid getting same messages. 
+
+    * ##### [[AWS] Glue Job Write iceberg table](aws/glue_jobs/write-iceberg-table.py)
+        **Description**: This is the example of a job that works with Iceberg table format. The job reads csv data from the given S3 location, creates a database in the Glue Catalog and writes the data to the Iceberg table.
