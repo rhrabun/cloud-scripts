@@ -84,8 +84,7 @@ def get_records_from_dynamodb(table_name, primary_key):
     deserialized_response = []
 
     for record in response:
-        flat_record = {k: deserializer.deserialize(
-            v) for k, v in record.items()}
+        flat_record = {k: deserializer.deserialize(v) for k, v in record.items()}
         deserialized_response.append(flat_record)
 
     del response
