@@ -1,5 +1,5 @@
-import sys
 import json
+import sys
 import argparse
 import subprocess
 
@@ -43,23 +43,25 @@ def parse_cmd():
 
 def run_command(command):
     try:
-        response = subprocess.run(
-            [command], stdout=subprocess.PIPE, shell=True, check=True)
-
-
-        return response
+        return subprocess.run(command, stdout=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError as e:
         print('-'*60)
         print(f'Something went wrong. Subprocess error:\n{e}')
         print('-'*60)
 
-        sys.exit()
+        sys.exit(1)
 
 
 def assume_role(account_id, role_name, source_profile, target_profile):
     response = run_command(
-        f"aws sts assume-role --role-arn arn:aws:iam::{account_id}:role/{role_name}" +
-        f" --role-session-name {target_profile} --external-id {account_id} --duration-seconds 3600 --profile {source_profile}"
+        [
+            "aws", "sts", "assume-role",
+            "--role-arn", f"arn:aws:iam::{account_id}:role/{role_name}",
+            "--role-session-name", target_profile,
+            "--external-id", account_id,
+            "--duration-seconds", "3600",
+            "--profile", source_profile,
+        ]
     )
     credentials = json.loads(response.stdout.decode('utf-8'))
 
@@ -68,13 +70,17 @@ def assume_role(account_id, role_name, source_profile, target_profile):
 
 def set_profile(credentials, target_profile):
     run_command(
-        f"aws configure set profile.{target_profile}.aws_access_key_id '{credentials['Credentials']['AccessKeyId']}'")
+        ["aws", "configure", "set",
+         f"profile.{target_profile}.aws_access_key_id",
+         credentials['Credentials']['AccessKeyId']])
     run_command(
-        f"aws configure set profile.{target_profile}.aws_secret_access_key '{credentials['Credentials']['SecretAccessKey']}'")
+        ["aws", "configure", "set",
+         f"profile.{target_profile}.aws_secret_access_key",
+         credentials['Credentials']['SecretAccessKey']])
     run_command(
-        f"aws configure set profile.{target_profile}.aws_session_token '{credentials['Credentials']['SessionToken']}'")
-
-    return
+        ["aws", "configure", "set",
+         f"profile.{target_profile}.aws_session_token",
+         credentials['Credentials']['SessionToken']])
 
 
 def main():
@@ -89,8 +95,6 @@ def main():
     credentials = assume_role(account_id, role_name,
                               source_profile, target_profile)
     set_profile(credentials, target_profile)
-
-    return
 
 
 if __name__ == "__main__":
