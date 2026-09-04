@@ -1,13 +1,9 @@
 import os
 import json
-import os.path
 import argparse
 
 import boto3
 
-
-# TODO:
-# * Add option to delete retrieved messages from the queue
 
 curr_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -41,6 +37,12 @@ def parse_cmd():
         required=True
     )
 
+    p.add_argument(
+        '--delete',
+        help='Delete retrieved messages from the queue after extraction',
+        action='store_true'
+    )
+
     args = p.parse_args()
 
     return args
@@ -68,7 +70,7 @@ def save_data_to_json(data, filename):
         json.dump(data, file, indent=4, sort_keys=True, default=str)
 
 
-def extract_messages(sqs_url, filename):
+def extract_messages(sqs_url, filename, delete=False):
     messages = []
 
     while True:
@@ -77,11 +79,21 @@ def extract_messages(sqs_url, filename):
             AttributeNames=['All'],
             MaxNumberOfMessages=10
         )
-        try:
-            messages.extend(response['Messages'])
-        except KeyError:
+        batch = response.get('Messages', [])
+        if not batch:
             break
-    
+
+        messages.extend(batch)
+
+        if delete:
+            sqs.delete_message_batch(
+                QueueUrl=sqs_url,
+                Entries=[
+                    {'Id': m['MessageId'], 'ReceiptHandle': m['ReceiptHandle']}
+                    for m in batch
+                ]
+            )
+
     save_data_to_json(messages, filename)
 
 
@@ -92,10 +104,11 @@ def main():
     sqs_url = args.url
     filename = curr_dir + '/' + args.file
     profile_name = args.profile_name
+    delete = args.delete
 
     create_aws_session(region, profile_name)
-    
-    extract_messages(sqs_url, filename)
+
+    extract_messages(sqs_url, filename, delete)
 
 
 if __name__ == "__main__":
