@@ -28,13 +28,6 @@ def parse_cmd():
     )
 
     p.add_argument(
-        '-k',
-        '--primary-key',
-        help='The name of the primary key in the DynamoDB table',
-        required=True
-    )
-
-    p.add_argument(
         '--process-num',
         help='Number of processes that should handle deletion (one process uses up to 200 WCU); default: 1',
         default=1
@@ -46,33 +39,36 @@ def parse_cmd():
 
 
 def create_aws_session(region, profile_name):
-    global dynamodb_client, dynamodb_resource
-
+    # Returns a session instead of clients, so that both the main process and
+    # worker processes can build their own clients. boto3 clients are not
+    # pickle-able, and globals set in the parent process are not guaranteed to
+    # reach workers, so each worker creates its own clients.
     if profile_name:
         print(f'Using profile {profile_name}\n')
-        my_session = boto3.session.Session(
+        return boto3.session.Session(
             region_name=region,
             profile_name=profile_name
         )
 
-        dynamodb_client = my_session.client('dynamodb')
-        dynamodb_resource = my_session.resource('dynamodb')
-    else:
-        print('Using default profile')
-
-        dynamodb_client = boto3.client('dynamodb', region_name=region)
-        dynamodb_resource = boto3.resource('dynamodb', region_name=region)
+    print('Using default profile')
+    return boto3.session.Session(region_name=region)
 
 
-def get_records_from_dynamodb(table_name, primary_key):
-    print('Gettings records from DynamoDB table\n')
+def get_key_schema(session, table_name):
+    client = session.client('dynamodb')
+    response = client.describe_table(TableName=table_name)
 
-    paginator = dynamodb_client.get_paginator('scan')
+    return [key['AttributeName'] for key in response['Table']['KeySchema']]
+
+
+def get_records_from_dynamodb(session, table_name, key_names):
+    print('Getting records from DynamoDB table\n')
+
+    client = session.client('dynamodb')
+    paginator = client.get_paginator('scan')
     response_iterator = paginator.paginate(
         TableName=table_name,
-        AttributesToGet=[
-            primary_key,
-        ],
+        ProjectionExpression=', '.join(key_names),
     )
 
     response = []
@@ -92,8 +88,9 @@ def get_records_from_dynamodb(table_name, primary_key):
     return deserialized_response
 
 
-def delete_records(data, table_name):
-    table = dynamodb_resource.Table(table_name)
+def delete_records(data, table_name, region, profile_name):
+    session = boto3.session.Session(region_name=region, profile_name=profile_name)
+    table = session.resource('dynamodb').Table(table_name)
 
     with table.batch_writer() as writer:
         for index, item in enumerate(data):
@@ -110,13 +107,16 @@ def main():
 
     region = args.region
     dynamodb_name = args.dynamodb
-    primary_key = args.primary_key
     profile_name = args.profile_name
     process_num = int(args.process_num)
 
-    create_aws_session(region, profile_name)
+    session = create_aws_session(region, profile_name)
 
-    data = get_records_from_dynamodb(dynamodb_name, primary_key)
+    # Resolve the full key schema, since the table may have a sort key in
+    # addition to the partition key
+    key_names = get_key_schema(session, dynamodb_name)
+
+    data = get_records_from_dynamodb(session, dynamodb_name, key_names)
 
     print(f'Got {len(data)} records from the DynamoDB table\n')
 
@@ -124,9 +124,9 @@ def main():
         with Pool(process_num) as p:
             data_chunks = split_list(data, process_num)
 
-            p.starmap(delete_records, [(part, dynamodb_name) for part in data_chunks])
+            p.starmap(delete_records, [(part, dynamodb_name, region, profile_name) for part in data_chunks])
     else:
-        delete_records(data, dynamodb_name)
+        delete_records(data, dynamodb_name, region, profile_name)
 
     print('\nFinished')
 
