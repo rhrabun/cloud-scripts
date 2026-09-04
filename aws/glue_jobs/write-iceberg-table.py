@@ -38,34 +38,30 @@ warehouse_path = args["WAREHOUSE_PATH"]
 database_name = args["DATABASE_NAME"]
 table_name = args["TABLE_NAME"]
 partition_keys = args['PARTITION_KEYS'] # Can be one key or list of keys
+partition_keys = [key.strip() for key in partition_keys.split(',')]
 
-try:
-    logger.info(f"Creating database: {database_name}")
-    # Make sure to grant permissions for Glue IAM role in Lake Formation - Permissions - Data locations
-    spark.sql(
-        f"""
-        CREATE DATABASE IF NOT EXISTS glue_catalog.{database_name}
-        LOCATION '{warehouse_path}/{database_name}.db'
-    """
-    )
-    logger.info("Finished creating database")
+logger.info(f"Creating database: {database_name}")
+# Make sure to grant permissions for Glue IAM role in Lake Formation - Permissions - Data locations
+spark.sql(
+    f"""
+    CREATE DATABASE IF NOT EXISTS glue_catalog.{database_name}
+    LOCATION '{warehouse_path}/{database_name}.db'
+"""
+)
+logger.info("Finished creating database")
 
-    logger.info(f'Reading data from file: "{csv_path}"')
-    df = (
-        spark.read.option("delimiter", ";")
-        .option("header", True)
-        .option("inferSchema", True)
-        .csv(csv_path)
-    )
-    logger.info(f"Got {df.count()} records")
+logger.info(f'Reading data from file: "{csv_path}"')
+df = (
+    spark.read.option("delimiter", ";")
+    .option("header", True)
+    .option("inferSchema", True)
+    .csv(csv_path)
+)
+logger.info(f"Got {df.count()} records")
 
-    logger.info(f'Writing records to the "{database_name}.{table_name}" table')
-    df.writeTo(f"glue_catalog.{database_name}.{table_name}").tableProperty(
-        "format-version", "2"
-    ).partitionedBy(partition_keys).using("iceberg").createOrReplace()
-
-except Exception as e:
-    logger.error("Error:")
-    logger.error(e)
+logger.info(f'Writing records to the "{database_name}.{table_name}" table')
+df.writeTo(f"glue_catalog.{database_name}.{table_name}").tableProperty(
+    "format-version", "2"
+).partitionedBy(partition_keys).using("iceberg").createOrReplace()
 
 job.commit()
