@@ -111,7 +111,7 @@ def get_users_from_cognito(user_pool_id):
 
 @timer
 def get_users_from_dynamodb(table_name):
-    print('Gettings a list of users from DynamoDB table\n')
+    print('Getting a list of users from DynamoDB table\n')
 
     paginator = dynamodb.get_paginator('scan')
     response_iterator = paginator.paginate(

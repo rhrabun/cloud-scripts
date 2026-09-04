@@ -11,7 +11,7 @@ Use [uv](https://docs.astral.sh/uv/) for managing dependencies and virtual envir
 ### Scripts tldr:
 * Amazon Web Services
     * ##### [[AWS] Switch Role](aws/sts-switch-role.py)
-        **Description**: Script allows to assume IAM role faster, than typing sts commands and providing credentials to file manually. Script uses subprocess to enn commands instead of SDK, which allows to put it in system aliases and don't worry about managing modules.  
+        **Description**: Script allows to assume IAM role faster, than typing sts commands and providing credentials to file manually. Script uses subprocess to run commands instead of SDK, which allows to put it in system aliases and don't worry about managing modules.  
 
     * ##### [[AWS] Delete all KMS keys](aws/kms/delete-keys.py)
         **Description**: Script deletes all Custom Managed [KMS](https://aws.amazon.com/kms/) keys in given region.  
@@ -29,7 +29,7 @@ Use [uv](https://docs.astral.sh/uv/) for managing dependencies and virtual envir
         **Description**: Script removes all [AWS Lambda](https://aws.amazon.com/lambda/) versions except for $LATEST version in given region.  
     
     * ##### [[AWS] SQS Extract all messages](aws/sqs/extract-messages.py)
-        **Description**: Script extracts all messages from [SQS](https://aws.amazon.com/sqs/) queue. Script does not delete messages, so make sure to increase `visibility timeout` in queue settings to avoid getting same messages. 
+        **Description**: Script extracts all messages from [SQS](https://aws.amazon.com/sqs/) queue. By default messages are not deleted, so make sure to increase `visibility timeout` in queue settings to avoid getting same messages. Pass `--delete` to remove each batch from the queue after extraction. 
 
     * ##### [[AWS] Glue Job Write iceberg table](aws/glue_jobs/write-iceberg-table.py)
         **Description**: This is the example of a job that works with Iceberg table format. The job reads csv data from the given S3 location, creates a database in the Glue Catalog and writes the data to the Iceberg table.
