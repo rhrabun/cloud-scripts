@@ -79,12 +79,9 @@ def main():
 
     create_aws_session(region, profile_name)
 
-    try:
-        arns_to_delete = get_lambdas_versions()
-        delete_versions(arns_to_delete)
-        print('Successfully deleted all lambda versions except for LATEST')
-    except Exception as e:
-        print(f'Smth went wrong. Error text:\n{e}')
+    arns_to_delete = get_lambdas_versions()
+    delete_versions(arns_to_delete)
+    print('Successfully deleted all lambda versions except for LATEST')
 
 
 if __name__ == '__main__':

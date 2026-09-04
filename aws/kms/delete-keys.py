@@ -75,12 +75,9 @@ def main():
 
     create_aws_session(region, profile_name)
 
-    try:
-        keys = get_keys()
-        delete_keys(keys)
-        print('Succesfully deleted all keys')
-    except Exception as e:
-        print(f'Smth went wrong. Error: \n{e}')
+    keys = get_keys()
+    delete_keys(keys)
+    print('Successfully deleted all keys')
 
 
 if __name__ == '__main__':
