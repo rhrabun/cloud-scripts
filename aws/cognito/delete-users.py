@@ -39,24 +39,23 @@ def parse_cmd():
 
 
 def create_aws_session(region, profile_name):
-    # Creates global cognito session, as multiprocessing doesnt support taking boto3.client
-    # object as parameter.
-    # Objects passed to mp.starmap() must be pickle-able, and AWS clients are not pickle-able
-    global cognito
-
+    # Returns a session instead of a client, so that both the main process and
+    # worker processes can build their own clients. boto3 clients are not
+    # pickle-able, and globals set in the parent process are not guaranteed to
+    # reach workers, so each worker creates its own clients.
     if profile_name:
         print(f'Using profile {profile_name}\n')
-        my_session = boto3.session.Session(
+        return boto3.session.Session(
             region_name=region,
             profile_name=profile_name
         )
-        cognito = my_session.client('cognito-idp')
-    else:
-        print('Using default profile')
-        cognito = boto3.client('cognito-idp', region_name = region)
+
+    print('Using default profile')
+    return boto3.session.Session(region_name=region)
 
 
-def get_users(user_pool_id):
+def get_users(session, user_pool_id):
+    cognito = session.client('cognito-idp')
     paginator = cognito.get_paginator('list_users')
     users_list = []
 
@@ -68,23 +67,25 @@ def get_users(user_pool_id):
 
     for page in response_iterator:
         users_list.extend(page['Users'])
-    
+
     print(f'Number of users in userpool "{user_pool_id}" - {len(users_list)}\n')
 
     return users_list
 
 
-def delete_worker(user_pool_id, users_list):
+def delete_worker(user_pool_id, region, profile_name, users_list):
+    session = boto3.session.Session(region_name=region, profile_name=profile_name)
+    cognito = session.client('cognito-idp')
     p = current_process()
     for user in users_list:
         print(
-            f"Deteling user - {user['Username']} - in process: {p.name} - pid: {p.pid}")
+            f"Deleting user - {user['Username']} - in process: {p.name} - pid: {p.pid}")
         try:
             cognito.admin_delete_user(
                 UserPoolId=user_pool_id,
                 Username=user['Username']
             )
-        except Exception as e:
+        except cognito.exceptions.UserNotFoundException:
             print(f"User {user['Username']} is not found")
 
 
@@ -92,12 +93,12 @@ def split_list(lst, n):
     return [lst[i::n] for i in range(n)]
 
 
-def delete_users(user_pool_id, users, process_num):
+def delete_users(user_pool_id, users, process_num, region, profile_name):
     users_list_divided = split_list(users, process_num)
 
     with Pool(process_num) as p:
         # Assign each part of users_list_divided [[part 1], [part 2], ...] to different process
-        p.starmap(delete_worker, [(user_pool_id, part) for part in users_list_divided])
+        p.starmap(delete_worker, [(user_pool_id, region, profile_name, part) for part in users_list_divided])
 
 
 def main():
@@ -108,14 +109,10 @@ def main():
     profile_name = args.profile_name
     process_num = int(args.processes)
 
-    create_aws_session(region, profile_name)
-
-    try:
-        users = get_users(user_pool_id)
-        delete_users(user_pool_id, users, process_num)
-        print("Successfully deleted all users!")
-    except Exception as e:
-        print(f'Smth went wrong. Error: \n{e}')
+    session = create_aws_session(region, profile_name)
+    users = get_users(session, user_pool_id)
+    delete_users(user_pool_id, users, process_num, region, profile_name)
+    print("Successfully deleted all users!")
 
 
 if __name__ == '__main__':
