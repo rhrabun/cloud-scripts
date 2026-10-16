@@ -1,22 +1,20 @@
-import json
 import argparse
-from time import time
+import json
+import logging
+import sys
 from os.path import isfile
-from functools import wraps
+from time import time
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
 
-
-def timer(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        ts = time()
-        result = f(*args, **kwargs)
-        te = time()
-        print(f'Function "{f.__name__}" took {te-ts} seconds to run\n')
-        return result
-    return wrapper
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def parse_cmd():
@@ -63,7 +61,7 @@ def create_aws_session(region, profile_name):
     global dynamodb, cognito
 
     if profile_name:
-        print(f'Using profile {profile_name}\n')
+        logger.info(f'Using profile {profile_name}')
         my_session = boto3.session.Session(
             region_name=region,
             profile_name=profile_name
@@ -72,7 +70,7 @@ def create_aws_session(region, profile_name):
         dynamodb = my_session.client('dynamodb')
         cognito = my_session.client('cognito-idp')
     else:
-        print('Using default profile')
+        logger.info('Using default profile')
 
         dynamodb = boto3.client('dynamodb', region_name=region)
         cognito = boto3.client('cognito-idp', region_name=region)
@@ -83,13 +81,12 @@ def save_data_to_json(data, filename):
         json.dump(data, file, indent=4, sort_keys=True, default=str)
 
 
-@timer
 def get_users_from_cognito(user_pool_id):
     paginator = cognito.get_paginator('list_users')
 
     users_list = []
 
-    print('Getting a list of users from Cognito\n')
+    logger.info('Getting a list of users from Cognito')
     response_iterator = paginator.paginate(
         UserPoolId=user_pool_id
     )
@@ -97,7 +94,7 @@ def get_users_from_cognito(user_pool_id):
     for page in response_iterator:
         users_list.extend(page['Users'])
 
-    print(f'Number of users in userpool "{user_pool_id}" - {len(users_list)}')
+    logger.info(f'Number of users in userpool "{user_pool_id}" - {len(users_list)}')
 
     # Transform Cognito nested dicts structure to flat dict
     for user in users_list:
@@ -109,9 +106,8 @@ def get_users_from_cognito(user_pool_id):
     return users_list
 
 
-@timer
 def get_users_from_dynamodb(table_name):
-    print('Getting a list of users from DynamoDB table\n')
+    logger.info('Getting a list of users from DynamoDB table')
 
     paginator = dynamodb.get_paginator('scan')
     response_iterator = paginator.paginate(
@@ -130,9 +126,7 @@ def get_users_from_dynamodb(table_name):
         flat_record = {k: deserializer.deserialize(v) for k, v in record.items()}
         deserialized_response.append(flat_record)
 
-    del response
-    
-    print(f'Number of DynamoDB items - {len(deserialized_response)}')
+    logger.info(f'Number of DynamoDB items - {len(deserialized_response)}')
 
     return deserialized_response
 
@@ -146,33 +140,38 @@ def main():
     userpool_id = args.userpool
     result_file = args.output + '.json'
 
+    # Check if file with raw users data exists
+    if isfile(result_file):
+        logger.error('File with users data already exists in target directory, exiting')
+
+        sys.exit(1)
+
+    if not dynamodb_name and not userpool_id:
+        logger.error('Either specify Cognito userpool ID or DynamoDB Table name to extract users from')
+
+        sys.exit(1)
+    elif dynamodb_name and userpool_id:
+        logger.error('Either specify Cognito userpool ID or DynamoDB Table name to extract users from; not both')
+
+        sys.exit(1)
+
     create_aws_session(region, profile_name)
 
-    users_list = []
-    
-    # Check if file with raw users data exists
-    if not isfile(result_file):
-        if not dynamodb_name and not userpool_id:
-            print('Either specify Cognito userpool ID or DynamoDB Table name to extract users from')
+    start = time()
 
-            return
-        elif dynamodb_name and userpool_id:
-            print('Either specify Cognito userpool ID or DynamoDB Table name to extract users from; not both')
-
-            return
-        elif dynamodb_name:
-            users_list = get_users_from_dynamodb(dynamodb_name)
-
-        elif userpool_id:
-            users_list = get_users_from_cognito(userpool_id)
-
-        save_data_to_json(users_list, f'./{result_file}')
+    if dynamodb_name:
+        users_list = get_users_from_dynamodb(dynamodb_name)
+        source = f'dynamodb={dynamodb_name}'
     else:
-        print('File with users data already exists in target directory, exiting')
-        
-        return
+        users_list = get_users_from_cognito(userpool_id)
+        source = f'userpool={userpool_id}'
 
-    print('Finished')
+    save_data_to_json(users_list, f'./{result_file}')
+
+    logger.info(
+        f'[extract-users] {source} users={len(users_list)} '
+        f'duration={time() - start:.1f}s file={result_file}'
+    )
 
 
 if __name__ == "__main__":

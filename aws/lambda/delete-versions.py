@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 import argparse
+import logging
+from time import time
 
 import boto3
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def parse_cmd():
@@ -28,14 +38,14 @@ def create_aws_session(region, profile_name):
     global aws_lambda
 
     if profile_name:
-        print(f'Using profile {profile_name}\n')
+        logger.info(f'Using profile {profile_name}')
         my_session = boto3.session.Session(
             region_name=region,
             profile_name=profile_name
         )
         aws_lambda = my_session.client('lambda')
     else:
-        print('Using default profile')
+        logger.info('Using default profile')
         aws_lambda = boto3.client('lambda', region_name=region)
 
 
@@ -60,15 +70,13 @@ def get_lambdas_versions():
 
 def delete_versions(lambdas_to_delete_list):
     for arn in lambdas_to_delete_list:
-        print(f"Deleting function version {arn}")
+        logger.info(f"Deleting function version {arn}")
 
         aws_lambda.delete_function(
             FunctionName=arn,
         )
 
-        print('done')
-
-    return
+    return len(lambdas_to_delete_list)
 
 
 def main():
@@ -77,11 +85,14 @@ def main():
     region = args.region
     profile_name = args.profile_name
 
+    start = time()
+
     create_aws_session(region, profile_name)
 
     arns_to_delete = get_lambdas_versions()
-    delete_versions(arns_to_delete)
-    print('Successfully deleted all lambda versions except for LATEST')
+    deleted = delete_versions(arns_to_delete)
+
+    logger.info(f'[delete-versions] region={region} deleted={deleted} duration={time() - start:.1f}s')
 
 
 if __name__ == '__main__':

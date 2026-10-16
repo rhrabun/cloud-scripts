@@ -1,8 +1,18 @@
 import argparse
+import logging
 from multiprocessing import Pool
+from time import time
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def parse_cmd():
@@ -30,6 +40,7 @@ def parse_cmd():
     p.add_argument(
         '--process-num',
         help='Number of processes that should handle deletion (one process uses up to 200 WCU); default: 1',
+        type=int,
         default=1
     )
 
@@ -44,13 +55,13 @@ def create_aws_session(region, profile_name):
     # pickle-able, and globals set in the parent process are not guaranteed to
     # reach workers, so each worker creates its own clients.
     if profile_name:
-        print(f'Using profile {profile_name}\n')
+        logger.info(f'Using profile {profile_name}')
         return boto3.session.Session(
             region_name=region,
             profile_name=profile_name
         )
 
-    print('Using default profile')
+    logger.info('Using default profile')
     return boto3.session.Session(region_name=region)
 
 
@@ -62,7 +73,7 @@ def get_key_schema(session, table_name):
 
 
 def get_records_from_dynamodb(session, table_name, key_names):
-    print('Getting records from DynamoDB table\n')
+    logger.info('Getting records from DynamoDB table')
 
     client = session.client('dynamodb')
     paginator = client.get_paginator('scan')
@@ -83,8 +94,6 @@ def get_records_from_dynamodb(session, table_name, key_names):
         flat_record = {k: deserializer.deserialize(v) for k, v in record.items()}
         deserialized_response.append(flat_record)
 
-    del response
-
     return deserialized_response
 
 
@@ -97,6 +106,10 @@ def delete_records(data, table_name, region, profile_name):
             writer.delete_item(item)
             print(f"Finished processing item number {index}", end='\r', flush=True)
 
+    print()
+
+    return len(data)
+
 
 def split_list(lst, n):
     return [lst[i::n] for i in range(n)]
@@ -108,7 +121,7 @@ def main():
     region = args.region
     dynamodb_name = args.dynamodb
     profile_name = args.profile_name
-    process_num = int(args.process_num)
+    process_num = args.process_num
 
     session = create_aws_session(region, profile_name)
 
@@ -118,17 +131,24 @@ def main():
 
     data = get_records_from_dynamodb(session, dynamodb_name, key_names)
 
-    print(f'Got {len(data)} records from the DynamoDB table\n')
+    logger.info(f'Got {len(data)} records from the DynamoDB table')
+
+    start = time()
 
     if process_num > 1:
         with Pool(process_num) as p:
             data_chunks = split_list(data, process_num)
 
-            p.starmap(delete_records, [(part, dynamodb_name, region, profile_name) for part in data_chunks])
-    else:
-        delete_records(data, dynamodb_name, region, profile_name)
+            results = p.starmap(delete_records, [(part, dynamodb_name, region, profile_name) for part in data_chunks])
 
-    print('\nFinished')
+        deleted = sum(results)
+    else:
+        deleted = delete_records(data, dynamodb_name, region, profile_name)
+
+    logger.info(
+        f'[delete-records] table={dynamodb_name} region={region} '
+        f'deleted={deleted} processes={process_num} duration={time() - start:.1f}s'
+    )
 
 
 if __name__ == "__main__":

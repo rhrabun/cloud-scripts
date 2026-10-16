@@ -1,6 +1,17 @@
 #!/usr/bin/env python3
-import boto3
 import argparse
+import logging
+from time import time
+
+import boto3
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def parse_cmd():
@@ -27,14 +38,14 @@ def create_aws_session(region, profile_name):
     global kms
 
     if profile_name:
-        print(f'Using profile {profile_name}\n')
+        logger.info(f'Using profile {profile_name}')
         my_session = boto3.session.Session(
             region_name=region,
             profile_name=profile_name
         )
         kms = my_session.client('kms')
     else:
-        print('Using default profile')
+        logger.info('Using default profile')
         kms = boto3.client('kms', region_name=region)
 
 
@@ -51,20 +62,22 @@ def get_keys():
 
 
 def delete_keys(keys):
+    scheduled = 0
     for key in keys:
         key_desc = kms.describe_key(
             KeyId=key['KeyId']
         )
 
         if key_desc['KeyMetadata']['KeyManager'] == 'CUSTOMER' and key_desc['KeyMetadata']['KeyState'] == 'Enabled':
-            print(f"Scheduling deletion for key {key_desc['Arn']}")
+            logger.info(f"Scheduling deletion for key {key_desc['Arn']}")
 
             kms.schedule_key_deletion(
                 KeyId=key_desc['KeyMetadata']['KeyId'],
                 PendingWindowInDays=7
             )
+            scheduled += 1
 
-    return
+    return scheduled
 
 
 def main():
@@ -73,11 +86,17 @@ def main():
     region = args.region
     profile_name = args.profile_name
 
+    start = time()
+
     create_aws_session(region, profile_name)
 
     keys = get_keys()
-    delete_keys(keys)
-    print('Successfully deleted all keys')
+    scheduled = delete_keys(keys)
+
+    logger.info(
+        f'[delete-keys] region={region} keys_total={len(keys)} '
+        f'scheduled_for_deletion={scheduled} duration={time() - start:.1f}s'
+    )
 
 
 if __name__ == '__main__':

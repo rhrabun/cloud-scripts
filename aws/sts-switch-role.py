@@ -1,7 +1,16 @@
-import json
-import sys
 import argparse
+import json
+import logging
 import subprocess
+import sys
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def parse_cmd():
@@ -45,9 +54,7 @@ def run_command(command):
     try:
         return subprocess.run(command, stdout=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError as e:
-        print('-'*60)
-        print(f'Something went wrong. Subprocess error:\n{e}')
-        print('-'*60)
+        logger.error(f'Something went wrong. Subprocess error:\n{e}')
 
         sys.exit(1)
 
@@ -85,7 +92,7 @@ def set_profile(credentials, target_profile):
 
 def main():
     args = parse_cmd()
-    print(f'Executing script with following parameters:\n{args}\n')
+    logger.info(f'Executing script with following parameters: {args}')
 
     source_profile = args.source_profile
     target_profile = args.target_profile

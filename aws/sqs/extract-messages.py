@@ -1,9 +1,18 @@
-import os
-import json
 import argparse
+import json
+import logging
+import os
+from time import time
 
 import boto3
 
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+    force=True,
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 curr_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -52,7 +61,7 @@ def create_aws_session(region, profile_name):
     global sqs
 
     if profile_name:
-        print(f'Using profile {profile_name}\n')
+        logger.info(f'Using profile {profile_name}')
         my_session = boto3.session.Session(
             region_name=region,
             profile_name=profile_name
@@ -60,7 +69,7 @@ def create_aws_session(region, profile_name):
 
         sqs = my_session.client('sqs')
     else:
-        print('Using default profile')
+        logger.info('Using default profile')
 
         sqs = boto3.client('sqs', region_name=region)
 
@@ -77,7 +86,8 @@ def extract_messages(sqs_url, filename, delete=False):
         response = sqs.receive_message(
             QueueUrl=sqs_url,
             AttributeNames=['All'],
-            MaxNumberOfMessages=10
+            MaxNumberOfMessages=10,
+            WaitTimeSeconds=20
         )
         batch = response.get('Messages', [])
         if not batch:
@@ -86,15 +96,20 @@ def extract_messages(sqs_url, filename, delete=False):
         messages.extend(batch)
 
         if delete:
-            sqs.delete_message_batch(
+            delete_response = sqs.delete_message_batch(
                 QueueUrl=sqs_url,
                 Entries=[
                     {'Id': m['MessageId'], 'ReceiptHandle': m['ReceiptHandle']}
                     for m in batch
                 ]
             )
+            failed = delete_response.get('Failed', [])
+            if failed:
+                logger.warning(f'Failed to delete {len(failed)} messages: {[f["Id"] for f in failed]}')
 
     save_data_to_json(messages, filename)
+
+    return len(messages)
 
 
 def main():
@@ -108,7 +123,13 @@ def main():
 
     create_aws_session(region, profile_name)
 
-    extract_messages(sqs_url, filename, delete)
+    start = time()
+    extracted = extract_messages(sqs_url, filename, delete)
+
+    logger.info(
+        f'[extract-messages] url={sqs_url} extracted={extracted} '
+        f'delete={delete} duration={time() - start:.1f}s file={args.file}'
+    )
 
 
 if __name__ == "__main__":
