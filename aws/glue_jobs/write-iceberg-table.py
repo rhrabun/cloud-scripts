@@ -1,9 +1,10 @@
 import sys
+
+from awsglue.context import GlueContext
+from awsglue.job import Job
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
-from awsglue.context import GlueContext
-from awsglue.job import Job
 
 # Spark session initialization for AWS Glue-compatible operations
 sc = SparkContext()
@@ -37,8 +38,8 @@ csv_path = args["SOURCE_DATA_PATH"]
 warehouse_path = args["WAREHOUSE_PATH"]
 database_name = args["DATABASE_NAME"]
 table_name = args["TABLE_NAME"]
-partition_keys = args['PARTITION_KEYS'] # Can be one key or list of keys
-partition_keys = [key.strip() for key in partition_keys.split(',')]
+partition_keys = args["PARTITION_KEYS"]  # Can be one key or list of keys
+partition_keys = [key.strip() for key in partition_keys.split(",")]
 
 logger.info(f"Creating database: {database_name}")
 # Make sure to grant permissions for Glue IAM role in Lake Formation - Permissions - Data locations

@@ -6,8 +6,8 @@ from time import time
 import boto3
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)s %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S',
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
     force=True,
 )
 logger = logging.getLogger(__name__)
@@ -18,15 +18,15 @@ def parse_cmd():
     p = argparse.ArgumentParser()
 
     p.add_argument(
-        '-r',
-        '--region',
-        help='The name of AWS region where the script should be executed, f.e. us-east-1',
-        required=True
+        "-r",
+        "--region",
+        help="The name of AWS region where the script should be executed, f.e. us-east-1",
+        required=True,
     )
     p.add_argument(
-        '-p',
-        '--profile-name',
-        help='The name of the AWS profile which script should use'
+        "-p",
+        "--profile-name",
+        help="The name of the AWS profile which script should use",
     )
 
     args = p.parse_args()
@@ -38,32 +38,29 @@ def create_aws_session(region, profile_name):
     global aws_lambda
 
     if profile_name:
-        logger.info(f'Using profile {profile_name}')
+        logger.info(f"Using profile {profile_name}")
         my_session = boto3.session.Session(
-            region_name=region,
-            profile_name=profile_name
+            region_name=region, profile_name=profile_name
         )
-        aws_lambda = my_session.client('lambda')
+        aws_lambda = my_session.client("lambda")
     else:
-        logger.info('Using default profile')
-        aws_lambda = boto3.client('lambda', region_name=region)
+        logger.info("Using default profile")
+        aws_lambda = boto3.client("lambda", region_name=region)
 
 
 def get_lambdas_versions():
-    paginator = aws_lambda.get_paginator('list_functions')
+    paginator = aws_lambda.get_paginator("list_functions")
     func_list = []
     versions_to_delete = []
 
-    iterator_response = paginator.paginate(
-        FunctionVersion='ALL'
-    )
+    iterator_response = paginator.paginate(FunctionVersion="ALL")
 
     for page in iterator_response:
-        func_list.extend(page['Functions'])
+        func_list.extend(page["Functions"])
 
     for func in func_list:
-        if func['Version'] != '$LATEST':
-            versions_to_delete.append(func['FunctionArn'])
+        if func["Version"] != "$LATEST":
+            versions_to_delete.append(func["FunctionArn"])
 
     return versions_to_delete
 
@@ -92,8 +89,10 @@ def main():
     arns_to_delete = get_lambdas_versions()
     deleted = delete_versions(arns_to_delete)
 
-    logger.info(f'[delete-versions] region={region} deleted={deleted} duration={time() - start:.1f}s')
+    logger.info(
+        f"[delete-versions] region={region} deleted={deleted} duration={time() - start:.1f}s"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -7,8 +7,8 @@ import boto3
 from boto3.dynamodb.types import TypeDeserializer
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)s %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S',
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
     force=True,
 )
 logger = logging.getLogger(__name__)
@@ -19,29 +19,26 @@ def parse_cmd():
     p = argparse.ArgumentParser()
 
     p.add_argument(
-        '-r',
-        '--region',
-        help='The name of AWS region where the script should be executed, f.e. us-east-1',
-        required=True
+        "-r",
+        "--region",
+        help="The name of AWS region where the script should be executed, f.e. us-east-1",
+        required=True,
     )
     p.add_argument(
-        '-p',
-        '--profile-name',
-        help='The name of the AWS profile which script should use'
-    )
-
-    p.add_argument(
-        '-d',
-        '--dynamodb',
-        help='The name of the DynamoDB table',
-        required=True
+        "-p",
+        "--profile-name",
+        help="The name of the AWS profile which script should use",
     )
 
     p.add_argument(
-        '--process-num',
-        help='Number of processes that should handle deletion (one process uses up to 200 WCU); default: 1',
+        "-d", "--dynamodb", help="The name of the DynamoDB table", required=True
+    )
+
+    p.add_argument(
+        "--process-num",
+        help="Number of processes that should handle deletion (one process uses up to 200 WCU); default: 1",
         type=int,
-        default=1
+        default=1,
     )
 
     args = p.parse_args()
@@ -55,36 +52,33 @@ def create_aws_session(region, profile_name):
     # pickle-able, and globals set in the parent process are not guaranteed to
     # reach workers, so each worker creates its own clients.
     if profile_name:
-        logger.info(f'Using profile {profile_name}')
-        return boto3.session.Session(
-            region_name=region,
-            profile_name=profile_name
-        )
+        logger.info(f"Using profile {profile_name}")
+        return boto3.session.Session(region_name=region, profile_name=profile_name)
 
-    logger.info('Using default profile')
+    logger.info("Using default profile")
     return boto3.session.Session(region_name=region)
 
 
 def get_key_schema(session, table_name):
-    client = session.client('dynamodb')
+    client = session.client("dynamodb")
     response = client.describe_table(TableName=table_name)
 
-    return [key['AttributeName'] for key in response['Table']['KeySchema']]
+    return [key["AttributeName"] for key in response["Table"]["KeySchema"]]
 
 
 def get_records_from_dynamodb(session, table_name, key_names):
-    logger.info('Getting records from DynamoDB table')
+    logger.info("Getting records from DynamoDB table")
 
-    client = session.client('dynamodb')
-    paginator = client.get_paginator('scan')
+    client = session.client("dynamodb")
+    paginator = client.get_paginator("scan")
     response_iterator = paginator.paginate(
         TableName=table_name,
-        ProjectionExpression=', '.join(key_names),
+        ProjectionExpression=", ".join(key_names),
     )
 
     response = []
     for page in response_iterator:
-        response.extend(page['Items'])
+        response.extend(page["Items"])
 
     # Deserialize the DynamoDB response to get rid of variable type declarations
     deserializer = TypeDeserializer()
@@ -99,12 +93,12 @@ def get_records_from_dynamodb(session, table_name, key_names):
 
 def delete_records(data, table_name, region, profile_name):
     session = boto3.session.Session(region_name=region, profile_name=profile_name)
-    table = session.resource('dynamodb').Table(table_name)
+    table = session.resource("dynamodb").Table(table_name)
 
     with table.batch_writer() as writer:
         for index, item in enumerate(data):
             writer.delete_item(item)
-            print(f"Finished processing item number {index}", end='\r', flush=True)
+            print(f"Finished processing item number {index}", end="\r", flush=True)
 
     print()
 
@@ -131,7 +125,7 @@ def main():
 
     data = get_records_from_dynamodb(session, dynamodb_name, key_names)
 
-    logger.info(f'Got {len(data)} records from the DynamoDB table')
+    logger.info(f"Got {len(data)} records from the DynamoDB table")
 
     start = time()
 
@@ -139,15 +133,18 @@ def main():
         with Pool(process_num) as p:
             data_chunks = split_list(data, process_num)
 
-            results = p.starmap(delete_records, [(part, dynamodb_name, region, profile_name) for part in data_chunks])
+            results = p.starmap(
+                delete_records,
+                [(part, dynamodb_name, region, profile_name) for part in data_chunks],
+            )
 
         deleted = sum(results)
     else:
         deleted = delete_records(data, dynamodb_name, region, profile_name)
 
     logger.info(
-        f'[delete-records] table={dynamodb_name} region={region} '
-        f'deleted={deleted} processes={process_num} duration={time() - start:.1f}s'
+        f"[delete-records] table={dynamodb_name} region={region} "
+        f"deleted={deleted} processes={process_num} duration={time() - start:.1f}s"
     )
 
 
